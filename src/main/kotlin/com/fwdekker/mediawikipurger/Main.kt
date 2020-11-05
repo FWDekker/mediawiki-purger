@@ -3,6 +3,7 @@ package com.fwdekker.mediawikipurger
 import com.beust.klaxon.JsonObject
 import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.options.convert
+import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.help
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.pair
@@ -29,10 +30,11 @@ class Purger : CliktCommand() {
 
     private val throttle by option("--throttle")
         .help(
-            "The maximum amount of requests per time period in milliseconds, such as `10 1000` for 10 requests per " +
-                "second."
+            "The maximum amount of API requests per time period in milliseconds, such as `10 1000` for 10 requests " +
+                "per second. Note that each purge requires two requests."
         )
         .int().pair()
+        .default(Pair(2, 1000))
 
     private val startFrom by option("--startFrom")
         .help("Starts purging pages in alphabetical order starting from this page title. Does not have to refer to " +
@@ -43,12 +45,7 @@ class Purger : CliktCommand() {
         val wiki = Wiki.Builder()
             .withApiEndpoint(apiUrl)
             .build()
-            .let { BasicWiki(it) }
-            .let { wiki ->
-                throttle
-                    ?.let { ThrottledWiki(wiki, requests = it.first, period = it.second) }
-                    ?: wiki
-            }
+            .let { ThrottledWiki(BasicWiki(it), requests = throttle.first, period = throttle.second) }
 
         val pagesByTitle = mutableMapOf<String, Page>()
         val allPages = mutableMapOf<Page, Boolean?>()
