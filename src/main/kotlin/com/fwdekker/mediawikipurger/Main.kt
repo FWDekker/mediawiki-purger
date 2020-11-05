@@ -1,7 +1,6 @@
 package com.fwdekker.mediawikipurger
 
 import com.beust.klaxon.JsonObject
-import com.beust.klaxon.Parser
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.fastily.jwiki.core.Wiki
 
@@ -13,7 +12,7 @@ fun main() {
     val wiki = Wiki.Builder()
         .withApiEndpoint("https://fallout.fandom.com/api.php".toHttpUrlOrNull())
         .build()
-    val jsonParser = Parser.default()
+        .let { ThrottledWiki(MyWiki(it), requests = 10, period = 1000) }
 
     val pagesByTitle = mutableMapOf<String, Page>()
     val allPages = mutableMapOf<Page, Boolean?>()
@@ -21,7 +20,6 @@ fun main() {
     var gapfrom: String? = ""
     while (gapfrom != null) {
         val pageList = wiki.request(
-            jsonParser,
             method = "GET", action = "query",
             "format", "json",
             "generator", "allpages",
@@ -38,7 +36,6 @@ fun main() {
         pagesByTitle.putAll(purgeTargets.associateBy { it.title })
 
         val purgeStatus = wiki.request(
-            jsonParser,
             method = "POST", action = "purge",
             "format", "json",
             "pageids", purgeTargets.joinToString("|") { it.id.toString() }
@@ -50,43 +47,6 @@ fun main() {
 
         println("${allPages.count { it.value == true }}/${allPages.size} successful purges. Now purging `${gapfrom}`.")
     }
-}
-
-
-/**
- * Sends a request to this wiki.
- *
- * @param parser the parser to parse the server's JSON response with
- * @param method the HTTP method the request should have. Must be "GET" or "POST"
- * @param action the API action to perform, such as "query" or "purge"
- * @param params the parameters to give as part of the request. If "POST" is used, give keys and values in alternating
- * order
- * @return the API's response as a parsed JSON object
- */
-private fun Wiki.request(parser: Parser, method: String, action: String, vararg params: String): JsonObject {
-    val response =
-        when (method.toUpperCase()) {
-            "POST" -> this.basicPOST(action, params.toList().toHashMap())
-            "GET" -> this.basicGET(action, *params)
-            else -> throw Exception("Unknown HTTP method `$method`.")
-        }
-
-    val body = response.body?.string()
-        ?: throw Exception("API response body is unexpectedly null.")
-
-    return parser.parse(StringBuilder(body)) as JsonObject
-}
-
-/**
- * Converts a collection with an even number of elements to a hash map.
- *
- * Given `["a", "b", "c", "d"]`, this method returns `{"a": "b", "c": "d"}`.
- *
- * @return the hash map described by this collection
- */
-private fun Collection<String>.toHashMap(): HashMap<String, String> {
-    require(this.size % 2 == 0) { "Collection must have even number of elements to convert to hash map." }
-    return this.chunked(2).map { Pair(it[0], it[1]) }.toMap().let { HashMap(it) }
 }
 
 
