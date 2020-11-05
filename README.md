@@ -16,6 +16,7 @@ Usage: purger [OPTIONS]
 Options:
   --api URL          The URL to the MediaWiki API, such as
                      https://www.mediawiki.org/w/api.php.
+  --page-size INT    Amount of pages to purge at a time.
   --throttle INT...  The maximum amount of API requests per time period in
                      milliseconds, such as `10 1000` for 10 requests per
                      second. Note that each purge requires two requests.
@@ -23,6 +24,8 @@ Options:
                      this page title. Does not have to refer to an existing
                      page.
   -h, --help         Show this message and exit
+
+Process finished with exit code 0
 ```
 
 ## Development
