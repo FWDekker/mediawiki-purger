@@ -43,13 +43,13 @@ class MyWiki(private val wiki: Wiki) {
 
 
 /**
- * A wrapper around `MyWiki` that automatically throttles the number of requests.
+ * A wrapper around [MyWiki] that automatically throttles the number of requests.
  *
- * @property requests the maximum number of requests that may be made in any `period`
+ * @property requests the maximum number of requests that may be made in any [period]
  * @property period the minimum time difference in milliseconds between the `n`th request and the `(n + limit)`th
  * request for any `n`
  * @property wiki the wiki to wrap
- * @constructor constructs a new `ThrottledWiki`
+ * @constructor constructs a new throttled wiki
  */
 class ThrottledWiki(private val wiki: MyWiki, private val requests: Int, private val period: Long) {
     /**
@@ -59,7 +59,7 @@ class ThrottledWiki(private val wiki: MyWiki, private val requests: Int, private
 
 
     /**
-     * Invokes `request` on the wrapped `MyWiki`, possibly after a timeout if the throttle has been reached.
+     * Invokes [MyWiki.request] on the wrapped [MyWiki], possibly after a timeout if the throttle has been reached.
      *
      * @see MyWiki.request
      */
