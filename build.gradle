@@ -8,8 +8,9 @@ repositories {
 }
 
 dependencies {
-    implementation group: "org.fastily", name: "jwiki", version: jwikiVersion
     implementation group: "com.beust", name: "klaxon", version: klaxonVersion
+    implementation group: "com.github.ajalt.clikt", name: "clikt", version: cliktVersion
+    implementation group: "org.fastily", name: "jwiki", version: jwikiVersion
 
     testImplementation group: "org.assertj", name: "assertj-core", version: assertjVersion
     testImplementation group: "org.junit.jupiter", name: "junit-jupiter-api", version: junitVersion

@@ -17,11 +17,6 @@ class CircularBuffer<T : Any>(private val size: Int) {
     private var nextIndex: Int = 0
 
     /**
-     * The total number of items that have been added.
-     */
-    private var itemCount: Int = 0
-
-    /**
      * The items that have been added.
      */
     private val items: MutableList<T?>
@@ -42,17 +37,7 @@ class CircularBuffer<T : Any>(private val size: Int) {
     fun add(item: T) {
         items[nextIndex] = item
         nextIndex = (nextIndex + 1) % size
-        itemCount++
     }
-
-    /**
-     * Returns `true` if and only if at least [size] items have been added.
-     *
-     * Initially, this function returns `false`. Once it returns `true`, it will no longer return `false`.
-     *
-     * @return `true` if and only if at least `size` items have been added
-     */
-    fun isCircular() = itemCount >= size
 
     /**
      * Returns the item at the given index relative to the head, or `null` if there is no such item.

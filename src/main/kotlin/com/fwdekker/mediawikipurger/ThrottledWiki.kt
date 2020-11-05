@@ -6,17 +6,11 @@ import org.fastily.jwiki.core.Wiki
 
 
 /**
- * A wrapper around `Wiki` that works the way I want it to.
+ * An object that sends requests to MediaWiki wikis.
  *
- * @property wiki the wiki to wrap around
+ * An object is bound to one particular wiki.
  */
-class MyWiki(private val wiki: Wiki) {
-    /**
-     * Parses JSON responses from the server.
-     */
-    private val parser = Parser.default()
-
-
+interface MyWiki {
     /**
      * Sends a request to this wiki.
      *
@@ -26,7 +20,23 @@ class MyWiki(private val wiki: Wiki) {
      * alternating order
      * @return the API's response as a parsed JSON object
      */
-    fun request(method: String, action: String, vararg params: String): JsonObject {
+    fun request(method: String, action: String, vararg params: String): JsonObject
+}
+
+
+/**
+ * A wrapper around `Wiki` that works the way I want it to.
+ *
+ * @property wiki the wiki to wrap around
+ */
+class BasicWiki(private val wiki: Wiki) : MyWiki {
+    /**
+     * Parses JSON responses from the server.
+     */
+    private val parser = Parser.default()
+
+
+    override fun request(method: String, action: String, vararg params: String): JsonObject {
         val response =
             when (method.toUpperCase()) {
                 "POST" -> wiki.basicPOST(action, params.toList().toHashMap())
@@ -43,7 +53,7 @@ class MyWiki(private val wiki: Wiki) {
 
 
 /**
- * A wrapper around [MyWiki] that automatically throttles the number of requests.
+ * A wrapper around [BasicWiki] that automatically throttles the number of requests.
  *
  * @property requests the maximum number of requests that may be made in any [period]
  * @property period the minimum time difference in milliseconds between the `n`th request and the `(n + limit)`th
@@ -51,7 +61,7 @@ class MyWiki(private val wiki: Wiki) {
  * @property wiki the wiki to wrap
  * @constructor constructs a new throttled wiki
  */
-class ThrottledWiki(private val wiki: MyWiki, private val requests: Int, private val period: Long) {
+class ThrottledWiki(private val wiki: BasicWiki, private val requests: Int, private val period: Int) : MyWiki {
     /**
      * Timestamps at which requests have been made.
      */
@@ -59,16 +69,17 @@ class ThrottledWiki(private val wiki: MyWiki, private val requests: Int, private
 
 
     /**
-     * Invokes [MyWiki.request] on the wrapped [MyWiki], possibly after a timeout if the throttle has been reached.
+     * Invokes [BasicWiki.request] on the wrapped [BasicWiki], possibly after a timeout if the throttle has been reached.
      *
-     * @see MyWiki.request
+     * @see BasicWiki.request
      */
-    fun request(method: String, action: String, vararg params: String): JsonObject {
-        while (timestamps.isCircular()) {
+    override fun request(method: String, action: String, vararg params: String): JsonObject {
+        if (timestamps.get(-1) !== null) {
             val resumeTime = timestamps.get(-1)!! + period
             val waitTime = resumeTime - System.currentTimeMillis()
-            println("Waiting ${waitTime}ms")
-            if (waitTime > 0) Thread.sleep(waitTime)
+
+            if (waitTime > 0)
+                Thread.sleep(waitTime)
         }
         timestamps.add(System.currentTimeMillis())
 
