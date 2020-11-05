@@ -34,6 +34,10 @@ class Purger : CliktCommand() {
         )
         .int().pair()
 
+    private val startFrom by option("--startFrom")
+        .help("Starts purging pages in alphabetical order starting from this page title. Does not have to refer to " +
+            "an existing page.")
+
 
     override fun run() {
         val wiki = Wiki.Builder()
@@ -49,7 +53,7 @@ class Purger : CliktCommand() {
         val pagesByTitle = mutableMapOf<String, Page>()
         val allPages = mutableMapOf<Page, Boolean?>()
 
-        var gapfrom: String? = ""
+        var gapfrom: String? = startFrom
         while (gapfrom != null) {
             val pageList = wiki.request(
                 method = "GET", action = "query",
