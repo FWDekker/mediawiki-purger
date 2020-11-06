@@ -40,7 +40,7 @@ class Purger : CliktCommand() {
             """.trimIndent()
         )
         .int().pair()
-        .default(Pair(2, 1000))
+        .default(Pair(1, 2500))
     private val startFrom by option("--start-from")
         .help(
             """

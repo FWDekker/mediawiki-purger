@@ -64,7 +64,12 @@ class Wiki(private val apiUrl: String, private val client: ThrottledHttpClient) 
             val json = parser.parse(StringBuilder(response.body())) as JsonObject
             val actionWarnings = json.obj("warnings")?.obj(action)?.string("warnings")
             if (actionWarnings !== null && actionWarnings.contains("rate limit")) {
-                logger.warn { "Rate limit has been reached. Waiting 5 s until next attempt." }
+                logger.warn {
+                    """
+                    Server-side rate limit has been reached. Waiting 5 s until next attempt. Consider reducing the
+                    number of requests using the `--throttle` option.
+                    """.trimIndent()
+                }
                 Thread.sleep(RATE_LIMIT_TIMEOUT)
                 continue
             }
