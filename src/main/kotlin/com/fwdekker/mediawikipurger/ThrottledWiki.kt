@@ -2,7 +2,11 @@ package com.fwdekker.mediawikipurger
 
 import com.beust.klaxon.JsonObject
 import com.beust.klaxon.Parser
-import org.fastily.jwiki.core.Wiki
+import mu.KotlinLogging
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 
 
 /**
@@ -12,48 +16,83 @@ import org.fastily.jwiki.core.Wiki
  */
 interface RequestableWiki {
     /**
+     * Requests a token from the wiki using the given credentials, and sends that token with each subsequent request.
+     *
+     * @param username the username to log in with
+     * @param password the password to log in with
+     * @see logOut
+     */
+    fun logIn(username: String, password: String)
+
+    /**
+     * Stops sending the token acquired in [logIn].
+     */
+    fun logOut()
+
+    /**
      * Sends a request to this wiki.
      *
      * @param method the HTTP method the request should have. Must be "GET" or "POST"
      * @param action the API action to perform, such as "query" or "purge"
-     * @param params the parameters to give as part of the request. If "POST" is used, give keys and values in
-     * alternating order
+     * @param params the parameters to give as part of the request
      * @return the API's response as a parsed JSON object
      */
-    fun request(method: String, action: String, vararg params: String): JsonObject
+    fun request(method: String, action: String, params: Map<String, String> = emptyMap()): JsonObject
 }
 
 
 /**
- * A wrapper around `Wiki` that works the way I want it to.
- *
- * @property wiki the wiki to wrap around
+ * Interacts with a MediaWiki wiki through its API.
  */
-class SimpleWiki(private val wiki: Wiki) : RequestableWiki {
+class SimpleWiki(private val apiUrl: String) : RequestableWiki {
+    private val logger = KotlinLogging.logger {}
+
+
+    /**
+     * Does HTTP.
+     */
+    private val client = HttpClient.newBuilder().build()
+
     /**
      * Parses JSON responses from the server.
      */
     private val parser = Parser.default()
 
+    /**
+     * Parameters that are added to each request.
+     */
+    private val defaultParams = mutableMapOf("format" to "json")
 
-    override fun request(method: String, action: String, vararg params: String): JsonObject {
-        val response =
-            when (method.toUpperCase()) {
-                "POST" -> wiki.basicPOST(action, params.toList().toHashMap())
-                "GET" -> wiki.basicGET(action, *params)
-                else -> throw Exception("Unknown HTTP method `$method`.")
-            }
 
-        val body = response.body?.string()
-            ?: throw Exception("API response body is unexpectedly null.")
+    override fun logIn(username: String, password: String) {
+        val response = request("POST", "login", mapOf("username" to username, "password" to password))
+        defaultParams["token"] = response.obj("login")?.string("token")
+            ?: throw IllegalStateException("Failed to obtain login token.")
+    }
 
-        return parser.parse(StringBuilder(body)) as JsonObject
+    override fun logOut() {
+        defaultParams.remove("token")
+    }
+
+    override fun request(method: String, action: String, params: Map<String, String>): JsonObject {
+        val allParams = defaultParams + Pair("action", action) + params
+        val uri = URI.create("$apiUrl?${allParams.map { "${it.key}=${it.value}" }.joinToString("&")}")
+        logger.debug { "Sending request to `$uri`." }
+
+        val request = HttpRequest.newBuilder()
+            .method(method, HttpRequest.BodyPublishers.noBody())
+            .uri(uri)
+            .build()
+        val response = client.send(request, HttpResponse.BodyHandlers.ofString())
+        logger.debug { "Received `${response.body()}`." }
+
+        return parser.parse(StringBuilder(response.body())) as JsonObject
     }
 }
 
 
 /**
- * A wrapper around [SimpleWiki] that automatically throttles the number of requests.
+ * A wrapper around a [RequestableWiki] that automatically throttles the number of requests.
  *
  * @property requests the maximum number of requests that may be made in any [period]
  * @property period the minimum time difference in milliseconds between the `n`th request and the `(n + limit)`th
@@ -63,40 +102,35 @@ class SimpleWiki(private val wiki: Wiki) : RequestableWiki {
  */
 class ThrottledWiki(private val wiki: RequestableWiki, private val requests: Int, private val period: Int) :
     RequestableWiki {
+    private val logger = KotlinLogging.logger {}
+
     /**
      * Timestamps at which requests have been made.
      */
     private val timestamps = CircularBuffer<Long>(requests)
 
 
+    override fun logIn(username: String, password: String) = wiki.logIn(username, password)
+
+    override fun logOut() = wiki.logOut()
+
     /**
      * Invokes [SimpleWiki.request] on the wrapped [SimpleWiki], possibly after a timeout if the throttle has been reached.
      *
      * @see SimpleWiki.request
      */
-    override fun request(method: String, action: String, vararg params: String): JsonObject {
+    override fun request(method: String, action: String, params: Map<String, String>): JsonObject {
         if (timestamps.get(-1) !== null) {
             val resumeTime = timestamps.get(-1)!! + period
             val waitTime = resumeTime - System.currentTimeMillis()
 
-            if (waitTime > 0)
+            if (waitTime > 0) {
+                logger.trace { "Throttle engaged. Waiting $waitTime ms." }
                 Thread.sleep(waitTime)
+            }
         }
         timestamps.add(System.currentTimeMillis())
 
-        return wiki.request(method, action, *params)
+        return wiki.request(method, action, params)
     }
-}
-
-
-/**
- * Converts a collection with an even number of elements to a hash map.
- *
- * Given `["a", "b", "c", "d"]`, this method returns `{"a": "b", "c": "d"}`.
- *
- * @return the hash map described by this collection
- */
-private fun Collection<String>.toHashMap(): HashMap<String, String> {
-    require(this.size % 2 == 0) { "Collection must have even number of elements to convert to hash map." }
-    return this.chunked(2).map { Pair(it[0], it[1]) }.toMap().let { HashMap(it) }
 }

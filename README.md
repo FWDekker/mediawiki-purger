@@ -31,4 +31,9 @@ Process finished with exit code 0
 ## Development
 ```bash
 gradlew assemble  # Create the jar in the `build/libs` directory
+gradlew check     # Run tests and static analysis
 ```
+
+### Debugging
+To run the jar with a specific log level, run
+`java -Dorg.slf4j.simpleLogger.defaultLogLevel=<LEVEL> -jar mediawiki-purger.jar [options]`.

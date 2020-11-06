@@ -5,15 +5,13 @@ import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.parameters.groups.OptionGroup
 import com.github.ajalt.clikt.parameters.groups.cooccurring
 import com.github.ajalt.clikt.parameters.options.check
-import com.github.ajalt.clikt.parameters.options.convert
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.help
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.pair
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.parameters.types.int
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import org.fastily.jwiki.core.Wiki
+import mu.KotlinLogging
 
 
 /**
@@ -36,9 +34,10 @@ class Purger : CliktCommand() {
     }
 
 
+    private val logger = KotlinLogging.logger {}
+
     private val apiUrl by option("--api")
         .help("The URL to the MediaWiki API, such as https://www.mediawiki.org/w/api.php.")
-        .convert("URL") { it.toHttpUrlOrNull() ?: fail("The URL `${it}` is malformed.") }
         .required()
     private val pageSize by option("--page-size")
         .help("Amount of pages to purge at a time.")
@@ -54,7 +53,7 @@ class Purger : CliktCommand() {
         )
         .int().pair()
         .default(Pair(2, 1000))
-    private val startFrom by option("--startFrom")
+    private val startFrom by option("--start-from")
         .help(
             """
             Starts purging pages in alphabetical order starting from this page title. Does not have to refer to an
@@ -63,20 +62,12 @@ class Purger : CliktCommand() {
         )
         .default("")
 
-    private val userOptions by LoginOptions()
-        .cooccurring()
+    private val userOptions by LoginOptions().cooccurring()
 
 
     override fun run() {
-        val wiki = Wiki.Builder()
-            .withApiEndpoint(apiUrl)
-            .let { wiki ->
-                userOptions
-                    ?.let { wiki.withLogin(it.username, it.password) }
-                    ?: wiki
-            }
-            .build()
-            .let { ThrottledWiki(SimpleWiki(it), requests = throttle.first, period = throttle.second) }
+        val wiki = ThrottledWiki(SimpleWiki(apiUrl), requests = throttle.first, period = throttle.second)
+        userOptions?.also { wiki.logIn(it.username, it.password) }
 
         val pagesByTitle = mutableMapOf<String, Page>()
         val allPages = mutableMapOf<Page, Boolean?>()
@@ -85,10 +76,12 @@ class Purger : CliktCommand() {
         while (gapFrom != null) {
             val pageList = wiki.request(
                 method = "GET", action = "query",
-                "format", "json",
-                "generator", "allpages",
-                "gaplimit", pageSize.toString(),
-                "gapfrom", gapFrom
+                mapOf(
+                    "format" to "json",
+                    "generator" to "allpages",
+                    "gaplimit" to pageSize.toString(),
+                    "gapfrom" to gapFrom
+                )
             )
             gapFrom = pageList.obj("query-continue")?.obj("allpages")?.string("gapfrom") // MW 1.19.24 (Fandom)
                 ?: pageList.obj("continue")?.string("gapcontinue") // MW 1.33.3 (Fandom UCP)
@@ -102,19 +95,21 @@ class Purger : CliktCommand() {
 
             val purgeStatus = wiki.request(
                 method = "POST", action = "purge",
-                "format", "json",
-                "pageids", purgeTargets.joinToString("|") { it.id.toString() }
+                mapOf(
+                    "format" to "json",
+                    "pageids" to purgeTargets.joinToString("|") { it.id.toString() }
+                )
             )
             purgeStatus.array<JsonObject>("purge")?.forEach { purgedPage ->
                 val page = pagesByTitle[purgedPage.string("title")]!!
                 allPages[page] = purgedPage.string("purged") !== null
             }
 
-            println(
+            logger.info {
                 """
                 ${allPages.count { it.value == true }}/${allPages.size} successful purges. Now purging `${gapFrom}`.
                 """.trimIndent()
-            )
+            }
         }
     }
 }
