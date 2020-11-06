@@ -66,7 +66,10 @@ class Purger : CliktCommand() {
 
 
     override fun run() {
-        val wiki = ThrottledWiki(SimpleWiki(apiUrl), requests = throttle.first, period = throttle.second)
+        val wiki = Wiki(
+            apiUrl,
+            ThrottledHttpClient(LeakyBucketThrottleStrategy(invocations = throttle.first, period = throttle.second))
+        )
         userOptions?.also { wiki.logIn(it.username, it.password) }
 
         val pagesByTitle = mutableMapOf<String, Page>()
