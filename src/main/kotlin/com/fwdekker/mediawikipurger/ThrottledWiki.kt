@@ -8,9 +8,9 @@ import org.fastily.jwiki.core.Wiki
 /**
  * An object that sends requests to MediaWiki wikis.
  *
- * An object is bound to one particular wiki.
+ * An instance is bound to one particular wiki.
  */
-interface MyWiki {
+interface RequestableWiki {
     /**
      * Sends a request to this wiki.
      *
@@ -29,7 +29,7 @@ interface MyWiki {
  *
  * @property wiki the wiki to wrap around
  */
-class BasicWiki(private val wiki: Wiki) : MyWiki {
+class SimpleWiki(private val wiki: Wiki) : RequestableWiki {
     /**
      * Parses JSON responses from the server.
      */
@@ -53,7 +53,7 @@ class BasicWiki(private val wiki: Wiki) : MyWiki {
 
 
 /**
- * A wrapper around [BasicWiki] that automatically throttles the number of requests.
+ * A wrapper around [SimpleWiki] that automatically throttles the number of requests.
  *
  * @property requests the maximum number of requests that may be made in any [period]
  * @property period the minimum time difference in milliseconds between the `n`th request and the `(n + limit)`th
@@ -61,7 +61,8 @@ class BasicWiki(private val wiki: Wiki) : MyWiki {
  * @property wiki the wiki to wrap
  * @constructor constructs a new throttled wiki
  */
-class ThrottledWiki(private val wiki: BasicWiki, private val requests: Int, private val period: Int) : MyWiki {
+class ThrottledWiki(private val wiki: RequestableWiki, private val requests: Int, private val period: Int) :
+    RequestableWiki {
     /**
      * Timestamps at which requests have been made.
      */
@@ -69,9 +70,9 @@ class ThrottledWiki(private val wiki: BasicWiki, private val requests: Int, priv
 
 
     /**
-     * Invokes [BasicWiki.request] on the wrapped [BasicWiki], possibly after a timeout if the throttle has been reached.
+     * Invokes [SimpleWiki.request] on the wrapped [SimpleWiki], possibly after a timeout if the throttle has been reached.
      *
-     * @see BasicWiki.request
+     * @see SimpleWiki.request
      */
     override fun request(method: String, action: String, vararg params: String): JsonObject {
         if (timestamps.get(-1) !== null) {

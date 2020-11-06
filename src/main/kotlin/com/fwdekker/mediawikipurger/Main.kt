@@ -2,6 +2,8 @@ package com.fwdekker.mediawikipurger
 
 import com.beust.klaxon.JsonObject
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.parameters.groups.OptionGroup
+import com.github.ajalt.clikt.parameters.groups.cooccurring
 import com.github.ajalt.clikt.parameters.options.check
 import com.github.ajalt.clikt.parameters.options.convert
 import com.github.ajalt.clikt.parameters.options.default
@@ -24,17 +26,25 @@ fun main(args: Array<String>) = Purger().main(args)
  * Purges all pages on a MediaWiki wiki.
  */
 class Purger : CliktCommand() {
+    private class LoginOptions : OptionGroup() {
+        val username by option()
+            .help("The username to authenticate with against the API.")
+            .required()
+        val password by option()
+            .help("The password to authenticate with against the API.")
+            .required()
+    }
+
+
     private val apiUrl by option("--api")
         .help("The URL to the MediaWiki API, such as https://www.mediawiki.org/w/api.php.")
         .convert("URL") { it.toHttpUrlOrNull() ?: fail("The URL `${it}` is malformed.") }
         .required()
-
     private val pageSize by option("--page-size")
         .help("Amount of pages to purge at a time.")
         .int()
         .default(50)
         .check("Page size must be at least one.") { it > 0 }
-
     private val throttle by option("--throttle")
         .help(
             """
@@ -44,7 +54,6 @@ class Purger : CliktCommand() {
         )
         .int().pair()
         .default(Pair(2, 1000))
-
     private val startFrom by option("--startFrom")
         .help(
             """
@@ -54,12 +63,20 @@ class Purger : CliktCommand() {
         )
         .default("")
 
+    private val userOptions by LoginOptions()
+        .cooccurring()
+
 
     override fun run() {
         val wiki = Wiki.Builder()
             .withApiEndpoint(apiUrl)
+            .let { wiki ->
+                userOptions
+                    ?.let { wiki.withLogin(it.username, it.password) }
+                    ?: wiki
+            }
             .build()
-            .let { ThrottledWiki(BasicWiki(it), requests = throttle.first, period = throttle.second) }
+            .let { ThrottledWiki(SimpleWiki(it), requests = throttle.first, period = throttle.second) }
 
         val pagesByTitle = mutableMapOf<String, Page>()
         val allPages = mutableMapOf<Page, Boolean?>()
