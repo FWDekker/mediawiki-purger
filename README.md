@@ -2,7 +2,8 @@
 Purge all pages on a MediaWiki wiki using a CLI tool.
 
 ## Requirements
-Java 8 or newer.
+* Java 8 or newer.
+* Tested on MediaWiki 1.33.3.
 
 ## Usage
 1. Download the jar on [the releases page](https://github.com/FWDekker/mediawiki-purger/releases).

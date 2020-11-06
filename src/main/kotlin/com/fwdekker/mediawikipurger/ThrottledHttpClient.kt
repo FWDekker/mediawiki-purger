@@ -24,7 +24,7 @@ class ThrottledHttpClient(private val throttleStrategy: ThrottleStrategy) {
      * @see HttpClient.send
      */
     fun <T : Any> send(request: HttpRequest, responseBodyHandler: HttpResponse.BodyHandler<T>): HttpResponse<T> {
-
+        throttleStrategy.maybeThrottle()
         return client.send(request, responseBodyHandler)
     }
 }

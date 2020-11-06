@@ -2,8 +2,6 @@ package com.fwdekker.mediawikipurger
 
 import com.beust.klaxon.JsonObject
 import com.github.ajalt.clikt.core.CliktCommand
-import com.github.ajalt.clikt.parameters.groups.OptionGroup
-import com.github.ajalt.clikt.parameters.groups.cooccurring
 import com.github.ajalt.clikt.parameters.options.check
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.help
@@ -24,16 +22,6 @@ fun main(args: Array<String>) = Purger().main(args)
  * Purges all pages on a MediaWiki wiki.
  */
 class Purger : CliktCommand() {
-    private class LoginOptions : OptionGroup() {
-        val username by option()
-            .help("The username to authenticate with against the API.")
-            .required()
-        val password by option()
-            .help("The password to authenticate with against the API.")
-            .required()
-    }
-
-
     private val logger = KotlinLogging.logger {}
 
     private val apiUrl by option("--api")
@@ -47,8 +35,8 @@ class Purger : CliktCommand() {
     private val throttle by option("--throttle")
         .help(
             """
-            The maximum amount of API requests per time period in milliseconds, such as `10 1000` for 10 requests
-            per second. Note that each purge requires two requests.
+            The maximum amount of API requests per time period in milliseconds, such as `10 1000` for 10 requests per
+            second.
             """.trimIndent()
         )
         .int().pair()
@@ -62,66 +50,34 @@ class Purger : CliktCommand() {
         )
         .default("")
 
-    private val userOptions by LoginOptions().cooccurring()
-
 
     override fun run() {
-        val wiki = Wiki(
+        var successfulPurgeCount = 0
+
+        Wiki(
             apiUrl,
             ThrottledHttpClient(LeakyBucketThrottleStrategy(invocations = throttle.first, period = throttle.second))
         )
-        userOptions?.also { wiki.logIn(it.username, it.password) }
+            .traverse(
+                "POST",
+                action = "purge",
+                generator = "allpages", startFrom = startFrom,
+                params = mapOf("gaplimit" to pageSize.toString())
+            ) { response, nextPage ->
+                val purgedPages = response.array<JsonObject>("purge")!!
+                val failedPurges = purgedPages.filter { it.boolean("purged") == false }.map { it.string("title") }
+                successfulPurgeCount += purgedPages.size - failedPurges.size
 
-        val pagesByTitle = mutableMapOf<String, Page>()
-        val allPages = mutableMapOf<Page, Boolean?>()
+                if (failedPurges.isNotEmpty())
+                    logger.warn { "Failed to purge ${failedPurges.size}: $failedPurges." }
 
-        var gapFrom: String? = startFrom
-        while (gapFrom != null) {
-            val pageList = wiki.request(
-                method = "GET", action = "query",
-                mapOf(
-                    "format" to "json",
-                    "generator" to "allpages",
-                    "gaplimit" to pageSize.toString(),
-                    "gapfrom" to gapFrom
-                )
-            )
-            gapFrom = pageList.obj("query-continue")?.obj("allpages")?.string("gapfrom") // MW 1.19.24 (Fandom)
-                ?: pageList.obj("continue")?.string("gapcontinue") // MW 1.33.3 (Fandom UCP)
-
-            val purgeTargets = pageList.obj("query")?.obj("pages")
-                ?.map { it.value as JsonObject }
-                ?.map { Page(it.int("pageid")!!, it.string("title")!!) }
-                ?: throw Exception("API response does not list pages.")
-            allPages.putAll(purgeTargets.associateWith { null })
-            pagesByTitle.putAll(purgeTargets.associateBy { it.title })
-
-            val purgeStatus = wiki.request(
-                method = "POST", action = "purge",
-                mapOf(
-                    "format" to "json",
-                    "pageids" to purgeTargets.joinToString("|") { it.id.toString() }
-                )
-            )
-            purgeStatus.array<JsonObject>("purge")?.forEach { purgedPage ->
-                val page = pagesByTitle[purgedPage.string("title")]!!
-                allPages[page] = purgedPage.string("purged") !== null
+                logger.info {
+                    "Successfully purged $successfulPurgeCount page(s)." +
+                        if (nextPage !== null) " Next up: `$nextPage`."
+                        else " This was the last batch."
+                }
             }
 
-            logger.info {
-                """
-                ${allPages.count { it.value == true }}/${allPages.size} successful purges. Now purging `${gapFrom}`.
-                """.trimIndent()
-            }
-        }
+        logger.info { "Completed purging." }
     }
 }
-
-
-/**
- * A descriptor of a page on a MediaWiki wiki.
- *
- * @property id the numerical identifier of the page
- * @property title the title of the page
- */
-private data class Page(val id: Int, val title: String)
