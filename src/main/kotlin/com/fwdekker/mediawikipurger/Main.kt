@@ -90,7 +90,8 @@ class Purger : CliktCommand() {
                 "gaplimit", pageSize.toString(),
                 "gapfrom", gapFrom
             )
-            gapFrom = pageList.obj("query-continue")?.obj("allpages")?.string("gapfrom")
+            gapFrom = pageList.obj("query-continue")?.obj("allpages")?.string("gapfrom") // MW 1.19.24 (Fandom)
+                ?: pageList.obj("continue")?.string("gapcontinue") // MW 1.33.3 (Fandom UCP)
 
             val purgeTargets = pageList.obj("query")?.obj("pages")
                 ?.map { it.value as JsonObject }
