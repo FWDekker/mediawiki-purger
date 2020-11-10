@@ -45,19 +45,15 @@ class Purger : CliktCommand() {
         .check("Page size must be at least one.") { it > 0 }
     private val throttle by option("--throttle")
         .help(
-            """
-            The maximum amount of API requests per time period in milliseconds, such as `10 1000` for 10 requests per
-            second.
-            """.trimIndent()
+            "The maximum amount of API requests per time period in milliseconds, such as `10 1000` for 10 requests " +
+                "per second."
         )
         .int().pair()
         .default(Pair(1, 2500))
     private val startFrom by option("--start-from")
         .help(
-            """
-            Starts purging pages in alphabetical order starting from this page title. Does not have to refer to an
-            existing page.
-            """.trimIndent()
+            "Starts purging pages in alphabetical order starting from this page title. Does not have to refer to an " +
+                "existing page."
         )
         .default("")
     private val loginOptions by LoginOptions().cooccurring()
