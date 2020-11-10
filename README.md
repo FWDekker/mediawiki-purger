@@ -2,7 +2,7 @@
 Purge all pages on a MediaWiki wiki using a CLI tool.
 
 ## Requirements
-* Java 8 or newer.
+* Java 11 or newer.
 * Tested on MediaWiki 1.33.3.
 
 ## Usage
@@ -15,16 +15,18 @@ Purge all pages on a MediaWiki wiki using a CLI tool.
 Usage: purger [OPTIONS]
 
 Options:
-  --api TEXT         The URL to the MediaWiki API, such as
-                     https://www.mediawiki.org/w/api.php.
-  --page-size INT    Amount of pages to purge at a time.
-  --throttle INT...  The maximum amount of API requests per time period in
-                     milliseconds, such as `10 1000` for 10 requests per
-                     second.
-  --start-from TEXT  Starts purging pages in alphabetical order starting from
-                     this page title. Does not have to refer to an existing
-                     page.
-  -h, --help         Show this message and exit
+  --api TEXT           The URL to the MediaWiki API, such as
+                       https://www.mediawiki.org/w/api.php.
+  --page-size INT      Amount of pages to purge at a time.
+  --throttle INT...    The maximum amount of API requests per time period in
+                       milliseconds, such as `10 1000` for 10 requests per
+                       second.
+  --start-from TEXT    Starts purging pages in alphabetical order starting
+                       from this page title. Does not have to refer to an
+                       existing page.
+  --username TEXT      The username to log in as, including the @.
+  --bot-password TEXT  The bot password to log in with.
+  -h, --help           Show this message and exit
 ```
 
 ## Development

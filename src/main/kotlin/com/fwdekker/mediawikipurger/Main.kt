@@ -2,6 +2,8 @@ package com.fwdekker.mediawikipurger
 
 import com.beust.klaxon.JsonObject
 import com.github.ajalt.clikt.core.CliktCommand
+import com.github.ajalt.clikt.parameters.groups.OptionGroup
+import com.github.ajalt.clikt.parameters.groups.cooccurring
 import com.github.ajalt.clikt.parameters.options.check
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.help
@@ -23,6 +25,15 @@ fun main(args: Array<String>) = Purger().main(args)
  */
 class Purger : CliktCommand() {
     private val logger = KotlinLogging.logger {}
+
+    private class LoginOptions : OptionGroup() {
+        val username by option("--username")
+            .help("The username to log in as, including the @.")
+            .required()
+        val password by option("--bot-password")
+            .help("The bot password to log in with.")
+            .required()
+    }
 
     private val apiUrl by option("--api")
         .help("The URL to the MediaWiki API, such as https://www.mediawiki.org/w/api.php.")
@@ -49,6 +60,7 @@ class Purger : CliktCommand() {
             """.trimIndent()
         )
         .default("")
+    private val loginOptions by LoginOptions().cooccurring()
 
 
     override fun run() {
@@ -58,6 +70,7 @@ class Purger : CliktCommand() {
             apiUrl,
             ThrottledHttpClient(LeakyBucketThrottleStrategy(invocations = throttle.first, period = throttle.second))
         )
+            .also { wiki -> loginOptions?.let { wiki.logIn(it.username, it.password) } }
             .traverse(
                 "POST",
                 action = "purge",
@@ -73,7 +86,7 @@ class Purger : CliktCommand() {
 
                 logger.info {
                     "Successfully purged $successfulPurgeCount page(s)." +
-                        if (nextPage !== null) " Next up: `$nextPage`."
+                        if (nextPage != null) " Next up: `$nextPage`."
                         else " This was the last batch."
                 }
             }

@@ -1,6 +1,7 @@
 package com.fwdekker.mediawikipurger
 
 import mu.KotlinLogging
+import java.net.CookieManager
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
@@ -13,9 +14,16 @@ import java.net.http.HttpResponse
  */
 class ThrottledHttpClient(private val throttleStrategy: ThrottleStrategy) {
     /**
+     * Manages cookies.
+     */
+    private val cookieManager = CookieManager()
+
+    /**
      * Does the HTTP.
      */
-    private val client = HttpClient.newHttpClient()
+    private val client = HttpClient.newBuilder()
+        .cookieHandler(cookieManager)
+        .build()
 
 
     /**
@@ -26,6 +34,13 @@ class ThrottledHttpClient(private val throttleStrategy: ThrottleStrategy) {
     fun <T : Any> send(request: HttpRequest, responseBodyHandler: HttpResponse.BodyHandler<T>): HttpResponse<T> {
         throttleStrategy.maybeThrottle()
         return client.send(request, responseBodyHandler)
+    }
+
+    /**
+     * Removes all cookies from this client.
+     */
+    fun removeCookies() {
+        cookieManager.cookieStore.removeAll()
     }
 }
 
@@ -76,7 +91,7 @@ class LeakyBucketThrottleStrategy(invocations: Int, private val period: Int) : T
      * Waits until there have been fewer than `requests` invocations in the past `period`.
      */
     override fun maybeThrottle() {
-        if (timestamps.get(-1) !== null) {
+        if (timestamps.get(-1) != null) {
             val resumeTime = timestamps.get(-1)!! + period
             val waitTime = resumeTime - System.currentTimeMillis()
 
