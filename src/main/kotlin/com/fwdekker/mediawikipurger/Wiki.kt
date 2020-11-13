@@ -1,6 +1,7 @@
 package com.fwdekker.mediawikipurger
 
 import com.beust.klaxon.JsonObject
+import com.beust.klaxon.KlaxonException
 import com.beust.klaxon.Parser
 import mu.KotlinLogging
 import java.net.URI
@@ -18,7 +19,22 @@ import java.net.http.HttpResponse
 class Wiki(private val apiUrl: String, private val client: ThrottledHttpClient) {
     companion object {
         /**
-         * Number of milliseconds to wait when the rate limiting timeout has been reached.
+         * Maximum number of attempts to fulfil a request before giving up.
+         */
+        private const val MAX_REQUEST_ATTEMPTS = 5
+
+        /**
+         * Number of milliseconds to wait before retrying when a request could not be completed for unknown reasons.
+         */
+        private const val UNEXPECTED_ERROR_TIMEOUT = 5000L
+
+        /**
+         * Number of milliseconds to wait before retrying when server sends a malformed reply.
+         */
+        private const val MALFORMED_REPLY_TIMEOUT = 5000L
+
+        /**
+         * Number of milliseconds to wait before retrying when the rate limiting timeout has been reached.
          */
         private const val RATE_LIMIT_TIMEOUT = 5000L
     }
@@ -106,28 +122,51 @@ class Wiki(private val apiUrl: String, private val client: ThrottledHttpClient) 
 
         val bodyPublisher = HttpRequest.BodyPublishers.ofString(body.toQueryParamString(urlEncode = true))
 
-        while (true) {
+        for (i in 1..MAX_REQUEST_ATTEMPTS) {
             val request = HttpRequest.newBuilder()
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .method(method, bodyPublisher)
                 .uri(uri)
                 .build()
-            val response = client.send(request, HttpResponse.BodyHandlers.ofString())
-            logger.debug { "Received `${response.body()}`." }
+            val response = client.send(request, HttpResponse.BodyHandlers.ofString()).body()
+            logger.debug { "Received `${response}`." }
 
-            val json = parser.parse(StringBuilder(response.body())) as JsonObject
+            val json: JsonObject
+            try {
+                json = parser.parse(StringBuilder(response)) as JsonObject
+            } catch (e: KlaxonException) {
+                logger.error(e) {
+                    "Failed to complete request because server sent malformed reply. Waiting " +
+                        "$UNEXPECTED_ERROR_TIMEOUT ms until next attempt."
+                }
+                Thread.sleep(UNEXPECTED_ERROR_TIMEOUT)
+                continue
+            }
+
+            // Check warnings
             val actionWarnings = json.obj("warnings")?.obj(action)?.string("warnings")
             if (actionWarnings != null && actionWarnings.contains("rate limit")) {
                 logger.warn {
-                    "Server-side rate limit has been reached. Waiting 5 s until next attempt. Consider reducing the " +
-                        "number of requests using the `--throttle` option."
+                    "Server-side rate limit has been reached. Waiting $RATE_LIMIT_TIMEOUT ms until next attempt. " +
+                        "Consider reducing the number of requests using the `--throttle` option."
                 }
                 Thread.sleep(RATE_LIMIT_TIMEOUT)
                 continue
             }
 
+            // Check completion status
+            if (params.containsKey("generator") && json.boolean("batchcomplete") != true) {
+                logger.error {
+                    "Failed to complete request for an unknown reason. Waiting $UNEXPECTED_ERROR_TIMEOUT ms until " +
+                        "next attempt."
+                }
+                Thread.sleep(UNEXPECTED_ERROR_TIMEOUT)
+                continue
+            }
+
             return json
         }
+        throw IllegalStateException("Failed to fulfil request in $MAX_REQUEST_ATTEMPTS attempts.")
     }
 
     /**
